@@ -4,89 +4,64 @@ from dash.dependencies import Input, Output
 import pandas as pd
 import plotly.express as px
 
-# Load the dengue dataset
+# Load data
 df = pd.read_csv('denguecases.csv')
 
-# Convert 'year' column to work with the slider (assuming you have a 'year' column)
-df['year'] = pd.to_datetime(df['year'], format='%Y')
-
-# Initialize the Dash app
+# Initialize the app
 app = dash.Dash(__name__)
 
-# Define the layout of the app
-app.layout = html.Div(children=[
-    html.H1(children='Dengue Cases in Philippines Dashboard'),
-    
-    html.P(children="These charts show the dengue cases in the Philippines across different years and regions."),
-    
-    # Dropdown for selecting the graph
+# Define the server for deployment
+server = app.server  # This is required for Gunicorn to work
+
+# Layout of the app
+app.layout = html.Div([
+    html.H1("Dengue Cases in the Philippines Dashboard"),
+    html.P("This dashboard presents an overview of dengue cases in the Philippines."),
     dcc.Dropdown(
-        id='graph-selector',
-        options=[
-            {'label': 'Bar Chart: Dengue Cases by Region', 'value': 'bar'},
-            {'label': 'Pie Chart: Dengue Cases by Region', 'value': 'pie'},
-            {'label': 'Scatter Plot: Dengue Cases vs Year', 'value': 'scatter'}
-        ],
-        value='bar',  # Default graph
-        clearable=False
+        id='year-dropdown',
+        options=[{'label': str(year), 'value': year} for year in df['Year'].unique()],
+        value=df['Year'].min()
     ),
-    
-    # Graph that will change based on the dropdown selection
-    dcc.Graph(id='main-graph'),
-    
-    # Slider for filtering by year
-    html.Label('Select Year:'),
-    dcc.Slider(
-        id='year-slider',
-        min=df['year'].dt.year.min(),
-        max=df['year'].dt.year.max(),
-        step=1,
-        value=df['year'].dt.year.min(),  # Default value
-        marks={str(year): str(year) for year in range(df['year'].dt.year.min(), df['year'].dt.year.max() + 1)}
-    ),
-    
-    # Checklist to filter by region
-    html.Label('Filter by Region:'),
-    dcc.Checklist(
-        id='region-selector',
-        options=[{'label': region, 'value': region} for region in df['region'].unique()],
-        value=df['region'].unique(),  # Default value
-        inline=True
-    ),
-    
-    # Dynamic Conclusion Section
-    html.Div(id='dynamic-conclusion', style={'margin-top': '20px'})
+    dcc.Graph(id='cases-by-region'),
+    dcc.Graph(id='cases-distribution'),
+    dcc.Graph(id='cases-over-time'),
+    html.H4("Conclusion"),
+    html.P(id='conclusion-text')
 ])
 
-# Define callback to update the graph and dynamic conclusion based on interactions
+# Define callback to update graphs and conclusion
 @app.callback(
-    [Output('main-graph', 'figure'),
-     Output('dynamic-conclusion', 'children')],  # New output for dynamic conclusion
-    [Input('graph-selector', 'value'),
-     Input('year-slider', 'value'),
-     Input('region-selector', 'value')]
+    [Output('cases-by-region', 'figure'),
+     Output('cases-distribution', 'figure'),
+     Output('cases-over-time', 'figure'),
+     Output('conclusion-text', 'children')],
+    [Input('year-dropdown', 'value')]
 )
-def update_graph_and_notes(selected_graph, selected_year, selected_regions):
-    # Filter data based on selected year and regions
-    filtered_df = df[(df['year'].dt.year == selected_year) & (df['region'].isin(selected_regions))]
-    
-    # Select graph and generate dynamic conclusion based on user input
-    if selected_graph == 'bar':
-        fig = px.bar(filtered_df, x='region', y='cases', title=f'Dengue Cases by Region in {selected_year}', barmode='group')
-        top_region = filtered_df.groupby('region')['cases'].sum().idxmax()
-        conclusion_text = f"In {selected_year}, {top_region} had the highest number of dengue cases."
-    
-    elif selected_graph == 'pie':
-        fig = px.pie(filtered_df, names='region', values='cases', title=f'Dengue Cases by Region in {selected_year}')
-        top_region = filtered_df.groupby('region')['cases'].sum().idxmax()
-        conclusion_text = f"In {selected_year}, {top_region} had the highest proportion of dengue cases."
-    
-    elif selected_graph == 'scatter':
-        fig = px.scatter(filtered_df, x='year', y='cases', color='region', title=f'Dengue Cases vs Year for Selected Regions')
-        conclusion_text = f"This scatter plot shows the dengue cases over the years for the selected regions."
+def update_dashboard(selected_year):
+    # Filter data by selected year
+    filtered_df = df[df['Year'] == selected_year]
 
-    # Return both the graph and the dynamic conclusion
-    return fig, html.P(conclusion_text)
+    # Bar chart for dengue cases by region
+    bar_fig = px.bar(filtered_df, x='Region', y='Dengue_Cases',
+                     title=f'Dengue Cases by Region for {selected_year}')
+    
+    # Pie chart for dengue cases distribution by region
+    pie_fig = px.pie(filtered_df, names='Region', values='Dengue_Cases',
+                     title=f'Dengue Cases Distribution by Region for {selected_year}')
+    
+    # Scatter plot for dengue cases over the years
+    scatter_fig = px.scatter(df, x='Year', y='Dengue_Cases',
+                             title='Dengue Cases Over the Years',
+                             color='Region')
+
+    # Generate conclusion text
+    max_region = filtered_df.loc[filtered_df['Dengue_Cases'].idxmax()]['Region']
+    conclusion = (f"In {selected_year}, the region with the highest cases was {max_region}. "
+                  f"Since the Philippines is a tropical country, it provides an ideal environment for the spread of dengue fever. "
+                  f"The abundance of stagnant water, high rainfall, and humidity create breeding grounds for mosquitoes, "
+                  f"which transmit the dengue virus. Factors such as urbanization and population density further contribute to the disease's spread.")
+
+    return bar_fig, pie_fig, scatter_fig, conclusion
 
 # Run the app
 if __name__ == '__main__':
