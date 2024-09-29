@@ -10,7 +10,7 @@ df = pd.read_csv('denguecases.csv')
 app = dash.Dash(__name__)
 
 # Define the server for deployment
-server = app.app  # This is required for Gunicorn to work
+server = app.server  # This is required for Gunicorn to work
 
 # Define the layout
 app.layout = html.Div(children=[
